@@ -1,0 +1,465 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{mathtools}
+\usepackage[hidelinks]{hyperref}
+
+\title{Mathematical Formulation for Predictive Maintenance on CMAPSS}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Purpose}
+This note collects mathematically useful formulations for the project on predictive maintenance and Remaining Useful Life (RUL) estimation using the NASA CMAPSS turbofan engine dataset. It is written so that either of the two model families under consideration can be described cleanly:
+\begin{itemize}
+    \item a causal convolutional model with dynamics-based feature augmentation,
+    \item a Transformer-based sequence model.
+\end{itemize}
+
+It also includes loss functions, regularization terms, and evaluation metrics that are suitable for comparison and analysis in the final report.
+
+\section{Problem Setup and Notation}
+Let $i \in \{1,\dots,N\}$ index engines and $t \in \{1,\dots,L_i\}$ index operating cycles for engine $i$, where $L_i$ is the total run-to-failure length of that engine in the training set.
+
+At each cycle $t$, engine $i$ produces a multivariate observation
+\begin{equation}
+    x_{i,t} \in \mathbb{R}^{d},
+\end{equation}
+where $d$ is the number of input variables, including operational settings and selected sensor channels.
+
+The observed trajectory of engine $i$ is
+\begin{equation}
+    X_i = (x_{i,1}, x_{i,2}, \dots, x_{i,L_i}).
+\end{equation}
+
+For training trajectories, the uncapped Remaining Useful Life is
+\begin{equation}
+    r_{i,t}^{\mathrm{raw}} = L_i - t.
+\end{equation}
+
+Following common CMAPSS practice, the capped RUL target may be defined as
+\begin{equation}
+    y_{i,t} = \min(r_{i,t}^{\mathrm{raw}}, R_{\max}),
+\end{equation}
+where $R_{\max}$ is a fixed cap such as $125$.
+
+The learning objective is to estimate a function
+\begin{equation}
+    f_\theta : (x_{i,1},\dots,x_{i,t}) \mapsto \hat{y}_{i,t},
+\end{equation}
+subject to the causal constraint that the prediction at time $t$ depends only on present and past observations.
+
+\section{Normalization and Feature Engineering}
+\subsection{Feature Normalization}
+Let $\mu \in \mathbb{R}^{d}$ and $\sigma \in \mathbb{R}^{d}$ denote the training-set mean and standard deviation. Each feature is normalized as
+\begin{equation}
+    \bar{x}_{i,t}^{(j)} = \frac{x_{i,t}^{(j)} - \mu_j}{\sigma_j},
+    \qquad j = 1,\dots,d.
+\end{equation}
+
+Equivalently, in vector form,
+\begin{equation}
+    \bar{x}_{i,t} = \frac{x_{i,t} - \mu}{\sigma},
+\end{equation}
+where the division is understood elementwise.
+
+\subsection{Dynamics-Based Augmentation}
+To explicitly model degradation trends, first-order and second-order temporal differences can be added.
+
+Assuming unit time step $\Delta t = 1$, define the velocity feature
+\begin{equation}
+    v_{i,t} =
+    \begin{cases}
+        0, & t = 1,\\
+        \bar{x}_{i,t} - \bar{x}_{i,t-1}, & t > 1,
+    \end{cases}
+\end{equation}
+and the acceleration feature
+\begin{equation}
+    a_{i,t} =
+    \begin{cases}
+        0, & t = 1,\\
+        v_{i,t} - v_{i,t-1}, & t > 1.
+    \end{cases}
+\end{equation}
+
+The augmented input at each time step is then
+\begin{equation}
+    \tilde{x}_{i,t} =
+    \begin{cases}
+        \bar{x}_{i,t}, & \text{raw features only},\\[4pt]
+        [\bar{x}_{i,t}; v_{i,t}], & \text{raw + velocity},\\[4pt]
+        [\bar{x}_{i,t}; v_{i,t}; a_{i,t}], & \text{raw + velocity + acceleration}.
+    \end{cases}
+\end{equation}
+
+If the augmented dimension is $\tilde d$, then $\tilde{x}_{i,t} \in \mathbb{R}^{\tilde d}$.
+
+\section{Sequence Construction}
+Two standard formulations are possible.
+
+\subsection{Full-Sequence Formulation}
+Each engine is treated as a variable-length sequence:
+\begin{equation}
+    \tilde{X}_i = (\tilde{x}_{i,1}, \tilde{x}_{i,2}, \dots, \tilde{x}_{i,L_i}).
+\end{equation}
+
+This is natural for causal models that produce one prediction per time step:
+\begin{equation}
+    \hat{y}_{i,t} = f_\theta(\tilde{x}_{i,1},\dots,\tilde{x}_{i,t}).
+\end{equation}
+
+\subsection{Sliding-Window Formulation}
+Alternatively, fixed-length windows of size $T$ may be extracted:
+\begin{equation}
+    W_{i,t} = (\tilde{x}_{i,t-T+1}, \dots, \tilde{x}_{i,t}),
+    \qquad t \geq T.
+\end{equation}
+
+Then the prediction problem becomes
+\begin{equation}
+    \hat{y}_{i,t} = f_\theta(W_{i,t}).
+\end{equation}
+
+If you use full sequences in implementation, this sliding-window formulation should not be described as the primary training setup in the final report.
+
+\section{Method 1: Causal Convolutional Model}
+\subsection{Layer-Wise Definition}
+Let
+\begin{equation}
+    h_{i,t}^{(0)} = \tilde{x}_{i,t}.
+\end{equation}
+
+For convolutional layer $\ell = 1,\dots,L$, with kernel size $k_\ell$, dilation $d_\ell$, weight tensors $\{W_{\ell,m}\}_{m=0}^{k_\ell-1}$, and bias $b_\ell$, define
+\begin{equation}
+    h_{i,t}^{(\ell)} =
+    \phi\left(
+        \sum_{m=0}^{k_\ell-1}
+        W_{\ell,m} \, h_{i,t-m d_\ell}^{(\ell-1)}
+        + b_\ell
+    \right),
+\end{equation}
+where $\phi(\cdot)$ is a nonlinearity such as ReLU or GELU, and where missing past values are handled by left-padding.
+
+The regression head maps the final hidden state to an RUL estimate:
+\begin{equation}
+    \hat{y}_{i,t} = g\left(h_{i,t}^{(L)}\right),
+\end{equation}
+where $g(\cdot)$ may be a multilayer perceptron.
+
+\subsection{Causality}
+Because the convolution is causal, $\hat{y}_{i,t}$ depends only on
+\begin{equation}
+    \{\tilde{x}_{i,\tau} : \tau \leq t\},
+\end{equation}
+which avoids future information leakage.
+
+\subsection{Receptive Field}
+The effective receptive field of a stack of causal convolutional layers is
+\begin{equation}
+    R = 1 + \sum_{\ell=1}^{L} (k_\ell - 1)d_\ell.
+\end{equation}
+
+For the special case of two layers with kernel size $3$ and dilation $1$,
+\begin{equation}
+    R = 1 + (3-1)\cdot 1 + (3-1)\cdot 1 = 5.
+\end{equation}
+
+Predictions for early times $t < R$ are partially influenced by padding and may therefore be excluded from loss computation if desired.
+
+\section{Method 2: Transformer-Based Sequence Model}
+\subsection{Input Embedding}
+Each augmented input is mapped into a latent space:
+\begin{equation}
+    z_{i,t}^{(0)} = W_e \tilde{x}_{i,t} + b_e,
+\end{equation}
+where $W_e \in \mathbb{R}^{d_{\mathrm{model}} \times \tilde d}$.
+
+Positional information is added:
+\begin{equation}
+    u_{i,t}^{(0)} = z_{i,t}^{(0)} + p_t,
+\end{equation}
+where $p_t \in \mathbb{R}^{d_{\mathrm{model}}}$ is a positional encoding.
+
+\subsection{Causal Self-Attention}
+At layer $\ell$, let the query, key, and value matrices be
+\begin{equation}
+    Q^{(\ell)} = U^{(\ell-1)}W_Q^{(\ell)}, \qquad
+    K^{(\ell)} = U^{(\ell-1)}W_K^{(\ell)}, \qquad
+    V^{(\ell)} = U^{(\ell-1)}W_V^{(\ell)}.
+\end{equation}
+
+The masked attention operator is
+\begin{equation}
+    \mathrm{Attn}(Q,K,V) =
+    \mathrm{softmax}\left(
+        \frac{QK^\top}{\sqrt{d_k}} + M
+    \right)V,
+\end{equation}
+where the mask $M$ satisfies
+\begin{equation}
+    M_{t,\tau} =
+    \begin{cases}
+        0, & \tau \leq t,\\
+        -\infty, & \tau > t.
+    \end{cases}
+\end{equation}
+
+This ensures causality by preventing attention to future time steps.
+
+\subsection{Output Mapping}
+After $L$ Transformer blocks, the RUL estimate is obtained from the final latent representation:
+\begin{equation}
+    \hat{y}_{i,t} = g(u_{i,t}^{(L)}).
+\end{equation}
+
+\section{Optional Hybrid Formulation}
+If both architectures are implemented and compared, there are two clean ways to present them in the report.
+
+\subsection{Pure Comparison}
+Treat the causal CNN and Transformer as two separate predictors:
+\begin{equation}
+    \hat{y}_{i,t}^{\mathrm{CNN}} = f_{\theta_{\mathrm{CNN}}}(\tilde{x}_{i,1},\dots,\tilde{x}_{i,t}),
+\end{equation}
+\begin{equation}
+    \hat{y}_{i,t}^{\mathrm{Tr}} = f_{\theta_{\mathrm{Tr}}}(\tilde{x}_{i,1},\dots,\tilde{x}_{i,t}).
+\end{equation}
+
+Then compare them using the same training targets and evaluation metrics.
+
+\subsection{Ensemble or Fusion Model}
+If a fused hybrid predictor is used, a simple formulation is
+\begin{equation}
+    \hat{y}_{i,t}^{\mathrm{hyb}} =
+    \alpha \hat{y}_{i,t}^{\mathrm{CNN}}
+    + (1-\alpha)\hat{y}_{i,t}^{\mathrm{Tr}},
+\end{equation}
+where $\alpha \in [0,1]$ is either fixed or learned.
+
+Another possibility is to concatenate learned representations:
+\begin{equation}
+    h_{i,t}^{\mathrm{hyb}} =
+    [h_{i,t}^{\mathrm{CNN}}; h_{i,t}^{\mathrm{Tr}}],
+\end{equation}
+\begin{equation}
+    \hat{y}_{i,t}^{\mathrm{hyb}} = g(h_{i,t}^{\mathrm{hyb}}).
+\end{equation}
+
+\section{Training Objective}
+\subsection{Masked Regression Loss}
+Let $m_{i,t} \in \{0,1\}$ indicate whether time step $t$ is valid for engine $i$ after padding. A general masked regression loss is
+\begin{equation}
+    \mathcal{L}_{\mathrm{RUL}} =
+    \frac{
+        \sum_{i=1}^{N}\sum_{t=1}^{L_{\max}}
+        m_{i,t}\,\ell(\hat{y}_{i,t}, y_{i,t})
+    }{
+        \sum_{i=1}^{N}\sum_{t=1}^{L_{\max}} m_{i,t}
+    }.
+\end{equation}
+
+If mean squared error is used,
+\begin{equation}
+    \ell(\hat{y}_{i,t}, y_{i,t}) = (\hat{y}_{i,t} - y_{i,t})^2.
+\end{equation}
+
+\subsection{Time-Weighted Loss}
+Later cycles often contain stronger degradation information, so a time-weighted loss can be used:
+\begin{equation}
+    w_{i,t} = \exp\left(\beta \frac{t}{L_i}\right),
+    \qquad \beta > 0.
+\end{equation}
+
+The weighted objective becomes
+\begin{equation}
+    \mathcal{L}_{\mathrm{w}} =
+    \frac{
+        \sum_{i=1}^{N}\sum_{t=1}^{L_{\max}}
+        m_{i,t}\,w_{i,t}\,\ell(\hat{y}_{i,t}, y_{i,t})
+    }{
+        \sum_{i=1}^{N}\sum_{t=1}^{L_{\max}} m_{i,t}\,w_{i,t}
+    }.
+\end{equation}
+
+\subsection{Receptive-Field-Aware Masking}
+For causal convolution, early predictions may be ignored until enough history is available. Define
+\begin{equation}
+    \tilde{m}_{i,t} =
+    \begin{cases}
+        0, & t < R,\\
+        m_{i,t}, & t \geq R.
+    \end{cases}
+\end{equation}
+
+Then
+\begin{equation}
+    \mathcal{L}_{\mathrm{conv}} =
+    \frac{
+        \sum_{i=1}^{N}\sum_{t=1}^{L_{\max}}
+        \tilde{m}_{i,t}\,w_{i,t}\,\ell(\hat{y}_{i,t}, y_{i,t})
+    }{
+        \sum_{i=1}^{N}\sum_{t=1}^{L_{\max}} \tilde{m}_{i,t}\,w_{i,t}
+    }.
+\end{equation}
+
+\section{Physically Motivated Regularization}
+These terms are optional, but they make the mathematical formulation stronger and more aligned with degradation physics.
+
+\subsection{Monotonicity Penalty}
+Since RUL should usually decrease with time, a monotonicity penalty can discourage upward jumps:
+\begin{equation}
+    \mathcal{L}_{\mathrm{mono}} =
+    \sum_{i=1}^{N}\sum_{t=1}^{L_i-1}
+    \max\left(0, \hat{y}_{i,t+1} - \hat{y}_{i,t}\right).
+\end{equation}
+
+\subsection{Smoothness Penalty}
+To reduce unrealistic oscillations, a smoothness term can be used:
+\begin{equation}
+    \mathcal{L}_{\mathrm{smooth}} =
+    \sum_{i=1}^{N}\sum_{t=1}^{L_i-1}
+    \left(\hat{y}_{i,t+1} - \hat{y}_{i,t}\right)^2.
+\end{equation}
+
+\subsection{Total Objective}
+A general total loss can then be written as
+\begin{equation}
+    \mathcal{L}_{\mathrm{total}} =
+    \mathcal{L}_{\mathrm{RUL}}
+    + \lambda_m \mathcal{L}_{\mathrm{mono}}
+    + \lambda_s \mathcal{L}_{\mathrm{smooth}},
+\end{equation}
+or, if time weighting is used,
+\begin{equation}
+    \mathcal{L}_{\mathrm{total}} =
+    \mathcal{L}_{\mathrm{w}}
+    + \lambda_m \mathcal{L}_{\mathrm{mono}}
+    + \lambda_s \mathcal{L}_{\mathrm{smooth}},
+\end{equation}
+where $\lambda_m,\lambda_s \geq 0$ are regularization coefficients.
+
+\section{Inference}
+For a test engine $i$, only a partial trajectory
+\begin{equation}
+    \tilde{X}_i^{\mathrm{obs}} =
+    (\tilde{x}_{i,1},\dots,\tilde{x}_{i,K_i})
+\end{equation}
+is observed, where $K_i$ is the final observed cycle and failure is not yet seen.
+
+The model produces a sequence of predictions
+\begin{equation}
+    \hat{y}_{i,1},\dots,\hat{y}_{i,K_i},
+\end{equation}
+and the final RUL estimate is
+\begin{equation}
+    \widehat{\mathrm{RUL}}_i = \hat{y}_{i,K_i}.
+\end{equation}
+
+\section{Evaluation Metrics}
+\subsection{Root Mean Squared Error}
+\begin{equation}
+    \mathrm{RMSE} =
+    \sqrt{
+        \frac{1}{N_{\mathrm{test}}}
+        \sum_{i=1}^{N_{\mathrm{test}}}
+        \left(\widehat{\mathrm{RUL}}_i - \mathrm{RUL}_i\right)^2
+    }.
+\end{equation}
+
+\subsection{Mean Absolute Error}
+\begin{equation}
+    \mathrm{MAE} =
+    \frac{1}{N_{\mathrm{test}}}
+    \sum_{i=1}^{N_{\mathrm{test}}}
+    \left|
+        \widehat{\mathrm{RUL}}_i - \mathrm{RUL}_i
+    \right|.
+\end{equation}
+
+\subsection{NASA Scoring Function}
+Define the prediction error
+\begin{equation}
+    d_i = \widehat{\mathrm{RUL}}_i - \mathrm{RUL}_i.
+\end{equation}
+
+The score for engine $i$ is
+\begin{equation}
+    S_i =
+    \begin{cases}
+        \exp\left(-\dfrac{d_i}{13}\right) - 1, & d_i < 0,\\[8pt]
+        \exp\left(\dfrac{d_i}{10}\right) - 1, & d_i \geq 0.
+    \end{cases}
+\end{equation}
+
+The total score is
+\begin{equation}
+    S = \sum_{i=1}^{N_{\mathrm{test}}} S_i.
+\end{equation}
+
+This metric penalizes late prediction more heavily than early prediction.
+
+\section{Comparison and Analysis Suggestions}
+If both methods are implemented, the analysis section can be organized around the following mathematical comparisons.
+
+\subsection{Prediction Quality}
+Compare
+\begin{equation}
+    \mathrm{RMSE}_{\mathrm{CNN}}, \quad \mathrm{MAE}_{\mathrm{CNN}}, \quad S_{\mathrm{CNN}}
+\end{equation}
+against
+\begin{equation}
+    \mathrm{RMSE}_{\mathrm{Tr}}, \quad \mathrm{MAE}_{\mathrm{Tr}}, \quad S_{\mathrm{Tr}}.
+\end{equation}
+
+\subsection{Temporal Behavior}
+For each method, analyze the sequence
+\begin{equation}
+    \{\hat{y}_{i,t}\}_{t=1}^{K_i}
+\end{equation}
+to study whether predictions are smooth, monotone, and sensitive to late-stage degradation.
+
+\subsection{Feature Contribution}
+An ablation can compare:
+\begin{equation}
+    \tilde{x}_{i,t} = \bar{x}_{i,t},
+    \qquad
+    \tilde{x}_{i,t} = [\bar{x}_{i,t};v_{i,t}],
+    \qquad
+    \tilde{x}_{i,t} = [\bar{x}_{i,t};v_{i,t};a_{i,t}],
+\end{equation}
+to measure the effect of dynamics-based features.
+
+\subsection{Loss Design}
+Another ablation can compare:
+\begin{equation}
+    \mathcal{L}_{\mathrm{RUL}},
+    \qquad
+    \mathcal{L}_{\mathrm{w}},
+    \qquad
+    \mathcal{L}_{\mathrm{total}}.
+\end{equation}
+
+\subsection{Interpretive Conclusion}
+A standard conclusion template is:
+\begin{itemize}
+    \item If the causal CNN performs better, the interpretation is that local degradation patterns and derivative features were sufficient and efficiently captured by causal convolutions.
+    \item If the Transformer performs better, the interpretation is that longer-range temporal dependencies and cross-time interactions were more important.
+    \item If the hybrid model performs best, the interpretation is that the two model families capture complementary aspects of degradation dynamics.
+\end{itemize}
+
+\section{Practical Note for the Final Report}
+For the final report, it is best to choose one of the following writing styles:
+\begin{itemize}
+    \item \textbf{Comparison paper style:} present the causal CNN and Transformer as two separate methods under a unified experimental pipeline, then compare them in the analysis.
+    \item \textbf{Hybrid paper style:} present both methods individually first, then introduce a fusion or ensemble formulation as the final proposed method.
+\end{itemize}
+
+The report should avoid mixing these two styles without clearly stating which one is the main contribution.
+
+\end{document}

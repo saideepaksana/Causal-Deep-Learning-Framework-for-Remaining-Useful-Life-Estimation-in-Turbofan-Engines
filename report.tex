@@ -1,0 +1,361 @@
+\documentclass[10pt,a4paper]{article}
+
+% =========================
+% Packages
+% =========================
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{newtxtext,newtxmath}   % Times-like font
+\usepackage{microtype}
+\usepackage{setspace}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{enumitem}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+
+% =========================
+% Layout
+% =========================
+\setstretch{1.0}
+\setlength{\parindent}{1em}
+\setlength{\parskip}{0.25em}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{2}
+
+% =========================
+% Header / Footer
+% =========================
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Hybrid Deep Learning Framework for Predictive Maintenance}
+\fancyhead[R]{\small \thepage}
+\fancyfoot[C]{\small Project Report}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% =========================
+% Title Info
+% =========================
+\title{\textbf{Hybrid Deep Learning Framework for Early Fault Detection and Remaining Useful Life Estimation in Turbofan Engines}}
+
+\author{%
+Sai Deepak Sana \\
+cs23btech11055
+\and
+Bhanu Ponguru \\
+cs23btech11046
+\and
+Harshith Pedineni\\
+cs23btech11045
+}
+
+\date{}
+
+% =========================
+% Document
+% =========================
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\begin{abstract}
+Modern turbofan engines operate under complex and varying conditions, generating high-dimensional multivariate time-series data that exhibit gradual degradation before failure. Detecting early fault signatures and accurately estimating Remaining Useful Life (RUL) are critical for predictive maintenance but remain challenging due to temporal dependencies, sensor noise, and non-linear degradation patterns. This work investigates a unified predictive maintenance framework using the NASA CMAPSS turbofan engine dataset, a widely used benchmark for degradation modeling.
+
+We compare classical machine learning approaches (Isolation Forest, One-Class SVM, and tree-based models), deep sequence models (LSTM and GRU), and reconstruction-based models (autoencoders) for anomaly detection and RUL estimation. Building on these, we propose a hybrid framework that integrates reconstruction error and predictive modeling signals to improve early fault detection and degradation tracking.
+
+The study evaluates models using classification and regression metrics, along with early warning lead time and false alarm rate. Our expected contribution is a systematic comparison of modeling paradigms under a unified pipeline, along with insights into how hybrid approaches can better capture degradation dynamics and provide earlier, more reliable maintenance signals.
+\end{abstract}
+
+\noindent\textbf{Keywords:} predictive maintenance, time-series anomaly detection, remaining useful life, deep learning, CMAPSS, hybrid models
+
+\section*{Statement of Originality}
+This project develops and evaluates a hybrid predictive maintenance framework that jointly models anomaly detection and Remaining Useful Life (RUL) estimation on the NASA CMAPSS dataset. Unlike standard approaches that treat these tasks independently, this work integrates reconstruction-based and prediction-based signals, performs systematic comparisons across classical and deep models, and analyzes early warning capability and sensor-level interpretability.
+
+\newpage
+
+\tableofcontents
+
+\newpage
+
+% =========================
+% Main Body
+% =========================
+
+\section{Introduction}
+Modern industrial systems increasingly rely on predictive maintenance to improve safety, reduce downtime, and optimize operational costs. Turbofan engines, in particular, operate under harsh and variable conditions, where failures are rarely abrupt and instead emerge through gradual degradation across multiple subsystems.
+
+Traditional maintenance strategies, including scheduled servicing and rule-based monitoring, often fail to capture subtle early-stage degradation patterns embedded in high-dimensional sensor streams. With the availability of large-scale time-series data, machine learning approaches have become a promising alternative for modeling complex system behavior and predicting failures in advance.
+
+The NASA Commercial Modular Aero-Propulsion System Simulation (CMAPSS) dataset provides a realistic benchmark for studying turbofan degradation, featuring multivariate sensor data across full engine lifecycles. However, key challenges remain: capturing long-term temporal dependencies, handling multivariate correlations, detecting early anomalies, and accurately estimating Remaining Useful Life (RUL).
+
+This project aims to address these challenges by developing a unified predictive maintenance framework that integrates anomaly detection and RUL estimation. We systematically compare classical machine learning methods, deep sequence models, and reconstruction-based approaches, and propose a hybrid model that combines their strengths. The goal is to identify modeling strategies that improve early fault detection while maintaining accurate degradation tracking.
+
+\section{Related Work}
+Predictive maintenance and RUL estimation have been extensively studied in both classical and deep learning paradigms.
+
+Early approaches relied on statistical and model-based techniques, including proportional hazards models and Kalman filtering, which require strong assumptions about system dynamics. With the rise of data-driven methods, machine learning approaches such as Support Vector Machines and Random Forests have been applied to fault detection and health monitoring.
+
+The NASA CMAPSS dataset has become a standard benchmark for RUL prediction. Saxena and Goebel (2008) introduced the dataset and established baseline prognostics methods. Subsequent work explored regression-based approaches, including gradient boosting and ensemble learning, for estimating RUL.
+
+Deep learning methods have shown significant improvements in modeling temporal dependencies. Recurrent neural networks (RNNs), particularly Long Short-Term Memory (LSTM) networks, have been widely used for RUL prediction due to their ability to capture long-term dependencies (Zheng et al., 2017). Gated Recurrent Units (GRUs) provide a computationally efficient alternative with comparable performance.
+
+Reconstruction-based approaches, such as autoencoders, have been applied to anomaly detection by learning representations of normal system behavior and identifying deviations through reconstruction error (Malhotra et al., 2016). These methods are particularly useful when failure labels are scarce.
+
+More recently, hybrid approaches combining multiple modeling paradigms have gained attention. For instance, integrating reconstruction error with predictive models can improve robustness and sensitivity to early degradation patterns. However, systematic comparisons of classical, deep, and hybrid approaches under a unified evaluation framework remain limited.
+
+This project builds on these works by combining anomaly detection and RUL estimation within a single pipeline, evaluating multiple model classes, and focusing on early warning capability and interpretability.
+
+
+\newpage
+
+
+\section{Methodology}
+
+This section presents the proposed framework for Remaining Useful Life (RUL) estimation using multivariate time-series data from the NASA CMAPSS turbofan engine dataset. The approach models degradation as a sequential inference problem and emphasizes accurate prediction at the final observed timestep.
+
+\subsection{Data Preprocessing}
+
+The CMAPSS dataset consists of multiple engine trajectories, each representing a full degradation cycle from healthy operation to failure. Each timestep contains operational settings and sensor measurements.
+
+Preprocessing includes:
+\begin{itemize}
+    \item \textbf{Normalization:} Sensor values are normalized using z-score normalization.
+    \item \textbf{Sensor Filtering:} Low-variance and non-informative sensors are removed based on statistical analysis.
+    \item \textbf{Sequence Construction:} Each engine is treated as an independent sequence. Sliding windows of fixed length $T$ are extracted without mixing engines.
+    \item \textbf{Target Definition:} For each timestep $t$, Remaining Useful Life is defined as:
+    \begin{equation}
+        y_t = T_{\text{failure}} - t
+    \end{equation}
+\end{itemize}
+
+\subsection{Problem Formulation}
+
+Given a sequence of observations:
+\begin{equation}
+    X = \{x_0, x_1, ..., x_t\}, \quad x_t \in \mathbb{R}^d
+\end{equation}
+
+the objective is to learn a function:
+\begin{equation}
+    f(X) \rightarrow \hat{y}_t
+\end{equation}
+
+that predicts the Remaining Useful Life at timestep $t$. The model operates under a causal constraint, where predictions depend only on past and current observations.
+
+\subsection{Model Architecture}
+
+We employ a Transformer-based sequence model to capture temporal dependencies and degradation dynamics.
+
+The architecture consists of:
+\begin{itemize}
+    \item \textbf{Input Embedding:} Sensor readings and operational settings are projected into a latent space.
+    \item \textbf{Positional Encoding:} Encodes temporal order of the sequence.
+    \item \textbf{Causal Self-Attention:} Ensures that predictions at timestep $t$ depend only on $\{x_0, ..., x_t\}$.
+    \item \textbf{Regression Head:} Maps latent representations to scalar RUL predictions.
+\end{itemize}
+
+The model produces RUL estimates at each timestep, enabling progressive refinement as more observations become available.
+
+\subsection{Causal Convolutional Model with Degradation Dynamics}
+
+To model degradation features over raw transformer, we introduce a causal convolutional architecture that explicitly models degradation dynamics through physically inspired features such as velocity and acceleration.
+
+\subsubsection{Dynamics-Based Feature Augmentation}
+
+In addition to raw sensor readings and operational settings, we incorporate first-order and second-order temporal differences to capture the rate of change and its variation over time. For each sensor and operational variable, we define:
+
+\begin{equation}
+    v_t = x_t - x_{t-1}
+\end{equation}
+
+\begin{equation}
+    a_t = v_t - v_{t-1}
+\end{equation}
+
+where $v_t$ represents the velocity (first-order difference) and $a_t$ represents the acceleration (second-order difference) at timestep $t$. These features provide explicit information about degradation trends and sudden changes in system behavior.
+
+The final input at each timestep is constructed as:
+\begin{equation}
+    \tilde{x}_t = [x_t, v_t, a_t]
+\end{equation}
+
+This augmented representation is treated as a multi-channel input to the convolutional model.
+
+\subsubsection{Model Architecture}
+
+We employ a stack of causal 1D convolutional layers to model temporal dependencies without introducing future information leakage. Each convolution is implemented with left-only padding to ensure that the output at timestep $t$ depends only on inputs from timesteps $\leq t$.
+
+The architecture consists of:
+
+\begin{itemize}
+    \item \textbf{Causal Conv Layer 1:} Maps input channels to a higher-dimensional feature space using kernel size $k=3$.
+    \item \textbf{Non-linearity:} ReLU activation.
+    \item \textbf{Causal Conv Layer 2:} Further processes temporal patterns and increases receptive field.
+    \item \textbf{Feature Projection:} The output is reshaped to $(B, T, C)$ and passed through a small multi-layer perceptron.
+\end{itemize}
+
+The model produces a scalar prediction for each timestep:
+\begin{equation}
+    \hat{y}_t = f(\tilde{x}_0, \tilde{x}_1, ..., \tilde{x}_t)
+\end{equation}
+
+\subsubsection{Receptive Field and Temporal Alignment}
+
+Due to the finite receptive field of convolutional layers, predictions at early timesteps are influenced by zero-padding rather than complete historical context. Let $R$ denote the effective receptive field of the network. Then, predictions for timesteps $t < R-1$ are considered unreliable.
+
+To ensure correct temporal alignment during training, the loss is computed only over valid timesteps:
+\begin{equation}
+    t \in [R-1, \dots, T-1]
+\end{equation}
+
+This guarantees that each prediction $\hat{y}_t$ is based solely on observed data and corresponds correctly to the ground truth RUL at timestep $t$.
+
+\subsubsection{Inference}
+
+At test time, the model processes the full observed sequence for each engine and produces predictions for all timesteps. The final RUL estimate is taken as the prediction at the last observed timestep:
+\begin{equation}
+    \hat{RUL} = \hat{y}_K
+\end{equation}
+
+This formulation naturally supports variable-length sequences and ensures consistency between training and inference.
+
+\subsection{Time-Weighted Training Objective}
+
+Early timesteps contain limited degradation information, while later timesteps are more informative and critical for accurate prediction. To reflect this asymmetry, we introduce a soft exponential weighting scheme.
+
+The weight for timestep $t$ is defined as:
+\begin{equation}
+    w_t = \exp\left(\beta \cdot \frac{t}{T}\right)
+\end{equation}
+
+where $\beta > 0$ controls the emphasis on later timesteps.
+
+The training loss is defined as:
+\begin{equation}
+    \mathcal{L} = \frac{\sum_{t=0}^{T} w_t \cdot \ell(y_t, \hat{y}_t)}{\sum_{t=0}^{T} w_t}
+\end{equation}
+
+where $\ell(\cdot)$ is a regression loss (e.g., Mean Squared Error). This formulation prioritizes accuracy near failure while still leveraging information from earlier timesteps.
+
+\subsection{Inference Strategy}
+
+At test time, each engine is provided as a partial trajectory:
+\begin{equation}
+    X = \{x_0, x_1, ..., x_K\}
+\end{equation}
+
+where the failure point is not observed. The model processes the full available sequence and outputs RUL predictions at each timestep. The final prediction is taken as:
+\begin{equation}
+    \hat{RUL} = \hat{y}_K
+\end{equation}
+
+Only the prediction at the last observed timestep is used for evaluation.
+
+\subsection{Evaluation Metric}
+
+Model performance is evaluated using the standard NASA scoring function, which penalizes late predictions more heavily than early ones.
+
+Let:
+\begin{equation}
+    d_i = \hat{RUL}_i - RUL_i
+\end{equation}
+
+The score for each engine is defined as:
+\begin{equation}
+    S_i =
+    \begin{cases}
+        \exp\left(-\frac{d_i}{13}\right) - 1, & d_i < 0 \\
+        \exp\left(\frac{d_i}{10}\right) - 1, & d_i \geq 0
+    \end{cases}
+\end{equation}
+
+The total score is:
+\begin{equation}
+    S = \sum_{i=1}^{N} S_i
+\end{equation}
+
+This metric reflects the asymmetric cost of prediction errors, where overestimating RUL (late prediction) incurs a higher penalty due to safety risks.
+
+\subsection{Interpretation}
+
+The model can be interpreted as performing sequential inference over engine health. Early predictions are driven by dataset-level priors due to limited information, while later predictions are increasingly conditioned on observed degradation patterns. The time-weighted objective aligns training with this information asymmetry, improving performance in critical late-stage predictions.
+
+
+\subsection{Baseline Models}
+% Isolation Forest
+% One-Class SVM
+% Random Forest / XGBoost for RUL regression
+
+\section{Experimental Setup}
+\subsection{Implementation Details}
+% Framework, optimizer, learning rate, batch size, window length, epochs.
+
+\subsection{Ablation Study Design}
+% Compare:
+% - baseline only
+% - deep model only
+% - hybrid model
+% - hybrid + explainability
+% - hybrid + engineered features
+
+\section{Results}
+\subsection{Quantitative Results}
+% Put your main tables here.
+
+\subsection{Qualitative Analysis}
+% Show degradation plots, anomaly score trends, and RUL curves.
+
+\subsection{Early Warning Performance}
+% Show how early the model detects failure.
+
+\section{Discussion}
+% Explain what worked, what failed, why the hybrid model helps,
+% and what the results mean scientifically and practically.
+
+\section{Limitations}
+% Dataset limitations, generalization limits, thresholds, noisy sensors, etc.
+
+\section{Conclusion and Future Work}
+% Summarize the contribution and suggest future directions.
+
+\section*{Acknowledgments}
+% Optional. Add only if needed.
+
+
+\section*{To do}
+1. Images from Damage Propagation Modeling for Aircraft
+Engine Run-to-Failure Simulation pdf, to add in the introduction section at the illustration section, 
+
+2. Expand both the architecture details, math stuff, 
+
+3. add references, and some research papers to the
+
+% =========================
+% Appendices
+% =========================
+\appendix
+
+\section{Additional Experimental Details}
+% Hyperparameter table, extra plots, model architecture details, etc.
+
+\section{Supplementary Results}
+% Additional results, failure cases, or ablation tables.
+
+% =========================
+% References
+% =========================
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
