@@ -1,0 +1,17 @@
+{
+  "window_size": 500,
+  "stride": 60,
+  "batch_size": 256,
+  "lr": 0.0003,
+  "weight_decay": 0.001,
+  "beta": 0.75,
+  "hidden_channels": 96,
+  "num_layers": 5,
+  "nhead": 2,
+  "dropout": 0.2,
+  "use_velocity": true,
+  "use_acceleration": true,
+  "max_rul": 2000,
+  "seed": 59,
+  "epochs": 200
+}
