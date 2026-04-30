@@ -1,4 +1,4 @@
-\documentclass[10pt,a4paper]{article}
+\documentclass[11pt,a4paper]{article}
 
 % =========================
 % Packages
@@ -20,9 +20,16 @@
 \usepackage{subcaption}
 \usepackage{enumitem}
 \usepackage[numbers,sort&compress]{natbib}
-\usepackage[hidelinks]{hyperref}
 \usepackage{xcolor}
 \usepackage{fancyhdr}
+\usepackage[hidelinks]{hyperref} % Base package
+\usepackage{xcolor}              % For custom colors
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=blue,               % This turns your GitHub/Kaggle links blue
+}
 
 % =========================
 % Layout
@@ -44,6 +51,7 @@
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\footrulewidth}{0pt}
 
+
 % =========================
 % Title Info
 % =========================
@@ -53,12 +61,13 @@
 Sai Deepak Sana \\
 cs23btech11055
 \and
-Bhanu Ponguru \\
+Ponguru Bhanu\\
 cs23btech11046
 \and
-Harshith Pedineni\\
+Peddineni Harshith\\
 cs23btech11045
 }
+
 
 \date{}
 
@@ -69,15 +78,26 @@ cs23btech11045
 \maketitle
 \thispagestyle{fancy}
 
+\begin{center}
+\vspace{5cm}
+\includegraphics[width=0.22\textwidth]{iith.png}\\[0.8em]
+{\small A Report Submitted to Dr. Sangkha Borah}\\
+{\small Indian Institute of Technology Hyderabad}
+\end{center}
+
+\newpage
+\vspace{3cm}
+
 \begin{abstract}
-Modern turbofan engines operate under complex and varying conditions, generating high-dimensional multivariate time-series data that exhibit gradual degradation before failure. Accurately estimating Remaining Useful Life (RUL) is critical for predictive maintenance but remains challenging due to temporal dependencies, sensor noise, and non-linear degradation patterns. This work investigates a causal sequence-learning framework using the NASA CMAPSS turbofan engine dataset, a widely used benchmark for degradation modeling.
+Remaining Useful Life (RUL) estimation for turbofan engines is a central predictive-maintenance task because it supports maintenance decisions before failure occurs. In a realistic setting, this is a causal sequence-regression problem: predictions at a given cycle must use only the measurements available up to that cycle, without relying on future sensor readings. This report evaluates two causal deep learning pipelines on the NASA CMAPSS benchmark, which contains simulated run-to-failure turbofan engine trajectories with operating settings and multivariate sensor measurements.
 
-We study two causal deep sequence models for RUL prediction: a dilated causal convolutional neural network (CNN) and a causal Transformer. Both models use train-set-only feature standardization, dynamics-based temporal augmentation through first- and second-order differences, and a time-weighted regression objective that emphasizes later cycles where degradation evidence is strongest.
+The first pipeline uses a dilated causal convolutional neural network (CNN), while the second uses a causal Transformer with masked self-attention. Both pipelines share the same preprocessing and evaluation protocol: train-set-only standardization, first- and second-order temporal differences, fixed-length window construction, final-window inference, and a time-weighted regression objective that emphasizes later cycles where degradation evidence is stronger. This shared setup allows the comparison to focus on the architectural difference between convolutional temporal modeling and attention-based temporal modeling.
 
-The study evaluates models using root mean squared error (RMSE), mean absolute error (MAE), and the NASA asymmetric scoring function. Across 50 sampled configurations per model family, the best causal CNN achieves a test RMSE of 1.0583, MAE of 0.0741, and NASA score of 10.6022, while the best Transformer achieves a test RMSE of 1.7273, MAE of 0.1495, and NASA score of 27.9299. These results indicate that causal temporal models with explicit degradation-rate features can estimate RUL accurately, with the implemented convolutional model giving the strongest recorded performance.
+We compare 50 sampled configurations for each model family using RMSE, MAE, and the NASA asymmetric score. The best recorded CNN configuration obtains a test RMSE of 1.0583, MAE of 0.0741, and NASA score of 10.6022. The best recorded Transformer configuration obtains a test RMSE of 1.7273, MAE of 0.1495, and NASA score of 27.9299. Across the saved experiments, longer input windows consistently improve performance, and compact causal models are more reliable than larger configurations under the implemented search.
+
+The strongest supported finding is not that one architecture is universally superior, but that sufficient temporal context and careful causal evaluation are essential for reliable RUL estimation. The report therefore emphasizes reproducibility, sensitivity analysis, and artifact-backed limitations rather than unsupported ablation claims.
 \end{abstract}
 
-\noindent\textbf{Keywords:} predictive maintenance, remaining useful life, CMAPSS, causal convolution, Transformer, time-series regression
 
 \section*{Statement of Originality}
 This project develops and evaluates data-driven Remaining Useful Life (RUL) estimation pipelines on the NASA CMAPSS dataset. The preprocessing, model formulations, objective functions, and reported results are derived from the implemented convolutional and Transformer notebooks and their recorded experiment outputs.
@@ -99,15 +119,29 @@ Modern aviation systems depend on reliable turbofan engines whose degradation is
 
 Traditional maintenance strategies, including scheduled servicing and rule-based monitoring, are limited when degradation signatures are weak, nonlinear, or distributed across many sensors. A rule that works for one operating regime may fail under another, and a single sensor may not reveal the full degradation state. Data-driven sequence models are attractive because they can learn multivariate temporal patterns directly from run-to-failure histories.
 
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=0.35\linewidth]{turbo2.png}
+    \caption{An example terbofan engine}
+\end{figure}
+
+
 \subsection{Problem Statement}
-The NASA Commercial Modular Aero-Propulsion System Simulation (CMAPSS) dataset provides a benchmark for studying turbofan degradation. It contains multiple engine trajectories with operating settings and sensor readings recorded over time until failure or until a final observed test cycle. The learning problem is to estimate the RUL at the final observed cycle of each test engine using only the current and past measurements.
+The NASA Commercial Modular Aero-Propulsion System Simulation (CMAPSS) dataset provides a benchmark for studying turbofan degradation. It contains multiple engine trajectories with operating settings and sensor readings recorded over time until failure or until a final observed test cycle. In this setting, Remaining Useful Life means the number of cycles left before failure. The learning problem is to estimate the RUL at the final observed cycle of each test engine using only the current and past measurements.
 
 This causality requirement is essential. A deployable prognostics model cannot use measurements from future cycles when estimating the current engine health state. The model must therefore represent temporal dependencies while preventing information leakage from later timesteps. CMAPSS is challenging because degradation is multivariate, nonstationary, and affected by operating conditions; moreover, early cycles often look healthy and carry limited information about the exact failure time.
 
 \subsection{Contributions}
-This project compares two causal deep learning approaches implemented in separate notebooks: a dilated causal convolutional neural network (CNN) and a causal Transformer. Both models are trained under a shared preprocessing and evaluation pipeline, enabling a direct comparison between convolutional locality and attention-based temporal modeling.
+This project makes four focused contributions:
+\begin{enumerate}[leftmargin=1.5em]
+    \item It formulates CMAPSS RUL prediction as a causal multivariate time-series regression task with final-window inference.
+    \item It implements a reproducible preprocessing pipeline using engine-level splitting, train-only standardization, and temporal derivative features.
+    \item It compares a dilated causal CNN and a causal Transformer under the same target construction, loss, metrics, and model-selection protocol.
+    \item It reports sensitivity patterns from 100 saved runs and explicitly separates supported conclusions from ablations that were not run.
+\end{enumerate}
 
-The main contributions are as follows. First, we formulate RUL estimation as a causal multivariate time-series regression problem on CMAPSS. Second, we augment raw normalized measurements with first- and second-order temporal differences to expose degradation-rate information. Third, we implement and compare a dilated causal CNN and a causal Transformer using the same target construction, final-window inference protocol, time-weighted MSE objective, and NASA scoring metric. Finally, we analyze 50 sampled hyperparameter configurations for each model family and show that the best causal CNN achieves the strongest recorded performance.
+\newpage
 
 \section{Related Work}
 
@@ -125,6 +159,8 @@ The NASA CMAPSS dataset has become one of the most common benchmarks for these m
 Temporal convolutional networks and attention-based sequence models are attractive alternatives to recurrent models. Dilated causal convolutions can efficiently expand receptive field while preserving chronological order \citep{bai2018empirical}. They are computationally efficient because convolutions parallelize across timesteps and can capture local degradation motifs with relatively few layers.
 
 Transformers replace recurrence with self-attention, allowing each timestep to directly attend to earlier timesteps under a causal mask \citep{vaswani2017attention}. This is appealing for degradation modeling because long-range dependencies and sensor interactions can be represented without forcing information through a recurrent hidden state. The gap addressed in this project is a direct notebook-backed comparison of a causal CNN and a causal Transformer under the same CMAPSS preprocessing, target construction, loss, and evaluation metrics.
+
+\newpage
 
 \section{Dataset Description}
 
@@ -149,51 +185,61 @@ FD004 & 249 & 248 & 61,249 & 41,214 & 248 & 128/234/543 & 19/153.5/486 & Multipl
 }
 \end{table}
 
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=0.82\textwidth]{figures/engine_length_distribution.png}
+    \caption{Distribution of engine trajectory lengths across CMAPSS subsets. The wide range of sequence lengths motivates final-window evaluation and sensitivity analysis over window size.}
+    \label{fig:engine_length_distribution}
+\end{figure}
+
 \subsection{Train/Test Split and Labels}
-Training trajectories run until failure, so the RUL at cycle $t$ is computed from the final cycle of the same engine. Test trajectories are truncated before failure, and the final-cycle RUL is supplied in the CMAPSS label files. The notebooks reconstruct a per-cycle test target by adding the distance from each cycle to the final observed test cycle. Both training and test targets are capped at $R_{\max}=2000$ in the implemented configuration.
+Training trajectories run until failure, so the RUL at cycle $t$ is computed from the final cycle of the same engine. For example, if an engine fails at cycle 200, then its RUL at cycle 150 is 50 cycles. Test trajectories are different: they are stopped before failure, and the CMAPSS label files provide the true RUL only at the final observed test cycle. The notebooks reconstruct a per-cycle test target by adding the distance from each earlier cycle to the final observed test cycle. Both training and test targets are capped at $R_{\max}=2000$ in the implemented configuration; for the local CMAPSS files used here, this cap is above the observed trajectory lengths and therefore does not create a restrictive artificial ceiling.
 
 \subsection{Sensors and Operating Settings}
 The notebooks use all three operating settings and all 21 sensor channels as input features. No sensor-dropping rule is applied in the implemented pipeline. Instead, nonstationarity and degradation trends are handled through train-only standardization and derivative feature augmentation. Retaining all channels keeps the comparison architecture-focused: any performance difference is due to the model family and sampled hyperparameters rather than a different feature subset.
 
-Figure~\ref{fig:engine_trajectory} shows a representative run-to-failure trajectory from FD001. Individual sensors do not all degrade monotonically, and some channels remain relatively flat for long periods. The useful signal is therefore multivariate and temporal: the model must combine operating conditions, slowly drifting measurements, and late-life changes rather than relying on one obvious threshold crossing.
+Individual sensors do not all degrade monotonically, and some channels remain relatively flat for long periods. The useful signal is therefore multivariate and temporal: the model must combine operating conditions, slowly drifting measurements, and late-life changes rather than relying on one obvious threshold crossing. Figure~\ref{fig:engine_trajectory} shows a representative trajectory from the local CMAPSS files.
 
-\begin{figure}[htbp]
+\begin{figure}[!h]
     \centering
-    \includegraphics[width=0.92\textwidth]{figures/engine_trajectory.png}
+    \includegraphics[width=0.86\textwidth]{figures/engine_trajectory.png}
     \caption{Representative engine trajectory from the local CMAPSS data. Sensor values are standardized within the selected engine only for visualization.}
     \label{fig:engine_trajectory}
 \end{figure}
 
 \subsection{Derivative Features}
-First- and second-order differences are included because RUL is tied not only to the current operating state but also to how that state is changing. A sensor value may remain within a broad operating range while its slope or curvature begins to shift near late degradation. Velocity features expose local rate of change, while acceleration features expose changes in that rate. Figure~\ref{fig:derivative_features} illustrates the relationship between a normalized sensor channel, its first difference, and its second difference for the same representative engine.
+First- and second-order differences are included because RUL is tied not only to the current operating state but also to how that state is changing. Velocity features expose local rate of change, while acceleration features expose changes in that rate. These features are motivated by degradation dynamics, but their isolated contribution is not claimed as an ablation result because all saved runs use both derivative channels. Figure~\ref{fig:derivative_features} illustrates the constructed raw, velocity, and acceleration channels for one representative signal.
 
-\begin{figure}[htbp]
+\begin{figure}[!h]
     \centering
-    \includegraphics[width=0.9\textwidth]{figures/derivative_features.png}
-    \caption{Example of raw state, velocity, and acceleration features used by both model families.}
+    \includegraphics[width=0.82\textwidth]{figures/derivative_features.png}
+    \caption{Example of raw state, velocity, and acceleration features used by both model families. This figure illustrates the input representation and is not an ablation result.}
     \label{fig:derivative_features}
 \end{figure}
 
 \subsection{Preprocessing Pipeline}
 Figure~\ref{fig:pipeline_diagram} summarizes the shared preprocessing and modeling pipeline. The same normalized and augmented windows are used for both model families, with only the tensor layout and architecture differing between the CNN and Transformer notebooks.
 
-\begin{figure}[htbp]
+\begin{figure}[!h]
 \centering
 \includegraphics[width=\textwidth]{figures/pipeline_diagram.png}
 \caption{Overall RUL estimation pipeline implemented in the notebooks.}
 \label{fig:pipeline_diagram}
 \end{figure}
 
+
+\newpage
+
+
 \section{Problem Formulation}
 
-Given an observed partial trajectory $(\tilde{x}_{i,1},\dots,\tilde{x}_{i,K_i})$, the goal is to estimate the remaining useful life at the final observed cycle:
+Given an observed partial trajectory $(\tilde{x}_{i,1},\dots,\tilde{x}_{i,K_i})$, where $\tilde{x}_{i,t}$ denotes the processed feature vector at cycle $t$, the goal is to estimate the remaining useful life at the final observed cycle:
 \begin{equation}
     f_\theta(\tilde{x}_{i,1},\dots,\tilde{x}_{i,K_i})
     \rightarrow
     \widehat{\mathrm{RUL}}_i.
 \end{equation}
-The model must satisfy causality: a prediction at cycle $t$ may depend on $\tilde{x}_{i,\tau}$ only for $\tau \leq t$. This constraint is enforced by left-padded causal convolutions in the CNN and by an upper-triangular attention mask in the Transformer.
-
+The model must satisfy causality: a prediction at cycle $t$ may depend on $\tilde{x}_{i,\tau}$ only for $\tau \leq t$. Operationally, the model is allowed to use the engine history up to the current cycle, but it is not allowed to look at measurements that would only be available in the future. This constraint is enforced by left-padded causal convolutions in the CNN and by an upper-triangular attention mask in the Transformer.
 
 \newpage
 
@@ -213,7 +259,7 @@ where the 24 input channels consist of three operational settings and 21 sensor 
     X_i = (x_{i,1}, x_{i,2}, \dots, x_{i,L_i}).
 \end{equation}
 
-Both notebooks standardize features using statistics computed only from the training split. For feature $j$, the normalized value is
+Both notebooks standardize features using statistics computed only from the training split. Standardization puts sensors with different physical units and magnitudes on a comparable scale, while using train-only statistics prevents information from the validation or test engines from leaking into preprocessing. For feature $j$, the normalized value is
 \begin{equation}
     \bar{x}_{i,t}^{(j)}
     =
@@ -222,7 +268,7 @@ Both notebooks standardize features using statistics computed only from the trai
 \end{equation}
 where $\mu_j$ and $\sigma_j$ are the training-set mean and standard deviation of feature $j$. Very small standard deviations are replaced by 1.0 in the implementation to avoid numerical instability.
 
-To expose local degradation dynamics, both models augment the normalized features with first- and second-order temporal differences:
+To expose local degradation dynamics, both models augment the normalized features with first- and second-order temporal differences. The first difference measures how much a signal changes from one cycle to the next, and the second difference measures how that rate of change itself changes. This is useful because degradation may appear as a slow trend even when an individual sensor value is not yet extreme:
 \begin{equation}
     v_{i,t} =
     \begin{cases}
@@ -243,7 +289,7 @@ This matches the notebooks' use of \texttt{np.diff(..., prepend=first)}, which m
     \tilde{x}_{i,t} =
     [\bar{x}_{i,t}; v_{i,t}; a_{i,t}].
 \end{equation}
-Since both velocity and acceleration augmentation are enabled in all sampled experiments, this representation supplies the models with the normalized operating state, local rate of change, and local change of rate.
+Since both velocity and acceleration augmentation are enabled in all sampled experiments, this representation supplies the models with three views of the same engine state: the current normalized measurements, their local rate of change, and the change in that rate.
 
 \subsection{RUL Target and Window Construction}
 
@@ -258,7 +304,7 @@ For a test engine, the true remaining life after the last observed cycle is supp
     \min\left(R_i^{\mathrm{test}} + (K_i - t), R_{\max}\right).
 \end{equation}
 
-Training samples are fixed-length windows. For a window length $T$ and stride $s$, a training sample beginning at cycle $r$ is
+Training samples are fixed-length windows. A window is a short segment of an engine's history that the model receives as one input sequence. For a window length $T$ and stride $s$, a training sample beginning at cycle $r$ is
 \begin{equation}
     W_{i,r}
     =
@@ -270,7 +316,7 @@ with the corresponding RUL sequence
     =
     (y_{i,r}, y_{i,r+1}, \dots, y_{i,r+T-1}).
 \end{equation}
-Training windows are generated with the sampled stride, while validation and test evaluation use the final available window for each engine. This mirrors deployment: the model observes the latest available operating history and returns the RUL estimate at the last observed cycle.
+Training windows are generated with the sampled stride, while validation and test evaluation use the final available window for each engine. This mirrors deployment: when an engine is inspected at the current cycle, the model should use the most recent available history and return the RUL estimate for that current cycle.
 
 \subsection{Dilated Causal Convolutional Model}
 
@@ -278,7 +324,7 @@ The convolutional notebook implements a stack of causal one-dimensional convolut
 \begin{equation}
     d_\ell = 2^\ell.
 \end{equation}
-The convolution uses left-only padding of $(k-1)d_\ell$ samples for kernel size $k$, so the output at time $t$ depends only on current and past values. In mathematical form, the hidden state of a causal convolutional layer can be written as
+The convolution uses left-only padding of $(k-1)d_\ell$ samples for kernel size $k$, so the output at time $t$ depends only on current and past values. Dilation skips over timesteps in a regular pattern, which lets deeper layers cover a longer history without making the network very deep. In mathematical form, the hidden state of a causal convolutional layer can be written as
 \begin{equation}
     h_{t}^{(\ell)}
     =
@@ -296,7 +342,7 @@ The effective receptive field of the convolutional stack is
     =
     1 + \sum_{\ell=0}^{L-1}(k-1)2^\ell.
 \end{equation}
-Predictions before this receptive field is fully populated are partially influenced by padding; therefore, the convolutional loss masks the first $R_{\mathrm{CNN}}-1$ positions in each window. After the convolutional backbone, the hidden representation is transposed to $(B,T,H)$ and passed through a regression head:
+Predictions before this receptive field is fully populated are partially influenced by padding; therefore, the convolutional loss masks the first $R_{\mathrm{CNN}}-1$ positions in each window. This avoids training the model on early outputs that have not yet seen enough real history. After the convolutional backbone, the hidden representation is transposed to $(B,T,H)$ and passed through a regression head:
 \begin{equation}
     \hat{y}_{i,t}^{\mathrm{CNN}}
     =
@@ -304,16 +350,16 @@ Predictions before this receptive field is fully populated are partially influen
 \end{equation}
 The head consists of layer normalization, a linear projection to half the hidden width, GELU, dropout, and a final linear projection to one scalar RUL value.
 
-\begin{figure}[htbp]
+\begin{figure}[!h]
 \centering
-\includegraphics[width=\textwidth]{figures/cnn_architecture.png}
+\includegraphics[width=0.9\textwidth]{figures/cnn_architecture.png}
 \caption{Causal CNN architecture implemented in the convolution notebook.}
 \label{fig:cnn_architecture}
 \end{figure}
 
 \subsection{Causal Transformer Model}
 
-The Transformer notebook implements a causal self-attention model over the same augmented sequences, using tensors arranged as $(B,T,C)$. Each input vector is first linearly projected into a latent space:
+The Transformer notebook implements a causal self-attention model over the same augmented sequences, using tensors arranged as $(B,T,C)$. Unlike the CNN, which combines information through local convolutional filters, the Transformer can directly compare one timestep with earlier timesteps through attention. Each input vector is first linearly projected into a latent space:
 \begin{equation}
     z_{i,t}^{(0)} = W_e \tilde{x}_{i,t} + b_e.
 \end{equation}
@@ -343,7 +389,7 @@ with the upper-triangular mask
         -\infty, & \tau > t.
     \end{cases}
 \end{equation}
-This prevents the prediction at cycle $t$ from attending to future cycles in the same window. The implementation uses PyTorch's \texttt{TransformerEncoder} with this causal mask, batch-first tensors, pre-normalized Transformer blocks, GELU activation, dropout, and a feed-forward dimension of $4d_{\mathrm{model}}$.
+This prevents the prediction at cycle $t$ from attending to future cycles in the same window. Entries above the diagonal are assigned $-\infty$ before the softmax, so their attention probability becomes zero. The implementation uses PyTorch's \texttt{TransformerEncoder} with this causal mask, batch-first tensors, pre-normalized Transformer blocks, GELU activation, dropout, and a feed-forward dimension of $4d_{\mathrm{model}}$.
 
 After $L$ Transformer layers, a regression head maps each hidden state to a scalar prediction:
 \begin{equation}
@@ -351,16 +397,18 @@ After $L$ Transformer layers, a regression head maps each hidden state to a scal
 \end{equation}
 The head consists of layer normalization, a linear projection to $d_{\mathrm{model}}/2$, GELU, dropout, and a final linear projection. Since every Transformer position can attend to all previous positions immediately through the causal mask, the notebook sets the Transformer receptive-field warmup parameter to $1$.
 
-\begin{figure}[htbp]
+\begin{figure}[!h]
 \centering
-\includegraphics[width=\textwidth]{figures/transformer_architecture.png}
+\includegraphics[width=0.9\textwidth]{figures/transformer_architecture.png}
 \caption{Causal Transformer architecture implemented in the Transformer notebook.}
 \label{fig:transformer_architecture}
 \end{figure}
 
+Both architectures are causal, but they impose different inductive biases. The CNN expands a local receptive field through dilation and is computationally linear in window length for fixed kernel size, while the Transformer allows each timestep to attend to all earlier timesteps at quadratic attention cost.
+
 \subsection{Training Objective and Evaluation Metrics}
 
-Both notebooks train with a masked, time-weighted mean squared error. For a batch of padded windows, let $m_{b,t} \in \{0,1\}$ indicate whether timestep $t$ is valid for batch element $b$. Later timesteps are weighted more heavily using
+Both notebooks train with a masked, time-weighted mean squared error. The mask removes padded or warmup positions from the loss, and the time weighting gives more importance to later positions in the window. This matches the final-window evaluation setting, where the last prediction is the one used for test RUL. For a batch of padded windows, let $m_{b,t} \in \{0,1\}$ indicate whether timestep $t$ is valid for batch element $b$. Later timesteps are weighted more heavily using
 \begin{equation}
     w_t = \exp\left(\beta \frac{t}{T-1}\right),
     \qquad t=0,\dots,T-1.
@@ -392,7 +440,7 @@ At inference time, each model processes the final available window of a test eng
 \begin{equation}
     \widehat{\mathrm{RUL}}_i = \hat{y}_{i,K_i}.
 \end{equation}
-Performance is measured with RMSE, MAE, and the NASA asymmetric score:
+Performance is measured with RMSE, MAE, and the NASA asymmetric score. RMSE emphasizes large errors because the error is squared before averaging, while MAE gives the average absolute error in a more direct way. Both are symmetric, meaning overestimation and underestimation of the same size are treated equally:
 \begin{equation}
     \mathrm{RMSE}
     =
@@ -411,7 +459,7 @@ Performance is measured with RMSE, MAE, and the NASA asymmetric score:
         \widehat{\mathrm{RUL}}_i-\mathrm{RUL}_i
     \right|,
 \end{equation}
-and, with $d_i=\widehat{\mathrm{RUL}}_i-\mathrm{RUL}_i$,
+The NASA score is different because predictive maintenance has an asymmetric risk profile. Predicting too much remaining life can delay maintenance beyond a safe point, so overestimation is penalized more strongly. With $d_i=\widehat{\mathrm{RUL}}_i-\mathrm{RUL}_i$,
 \begin{equation}
     S_i =
     \begin{cases}
@@ -421,7 +469,6 @@ and, with $d_i=\widehat{\mathrm{RUL}}_i-\mathrm{RUL}_i$,
     \qquad
     S = \sum_{i=1}^{N_{\mathrm{test}}} S_i.
 \end{equation}
-The NASA score penalizes overestimation of RUL more strongly, reflecting the higher risk of predicting more useful life than remains.
 
 \subsection{Computational Considerations}
 
@@ -460,9 +507,9 @@ Causal Transformer & $O(LT^2H + LTH^2)$ & Quadratic attention memory and compute
 
 \section{Experimental Setup}
 
-Both pipelines were implemented in PyTorch and executed on the merged CMAPSS subsets discovered in the local \texttt{CMaps/} directory. Engine identifiers were offset across subsets to prevent collisions. The training engines were split into training and validation groups at the engine level using an 80/20 split, so windows from the same engine were not mixed across the two splits. Model selection used the best validation RMSE observed during training.
+Both pipelines were implemented in PyTorch and executed on the merged CMAPSS subsets discovered in the local \texttt{CMaps/} directory. Engine identifiers were offset across subsets to prevent collisions. The training engines were split into training and validation groups at the engine level using an 80/20 split, so windows from the same engine were not mixed across the two splits. Feature standardization was fit only on the training engines for each run. Model selection used the checkpoint with the best validation RMSE, and test evaluation used the final available window for each test engine.
 
-Each model family ran 50 sampled experiments for 200 epochs with the Adam optimizer. The sampling seed schedule was $42+i$ for experiment index $i$, giving seeds 42 through 91. The implementation uses CUDA when available and otherwise falls back to CPU. Both searches used $R_{\max}=2000$ and enabled velocity and acceleration augmentation. Saved configurations and metrics are stored under \texttt{runs\_cmapss/} for the CNN and the corresponding Transformer run directory for the attention model. Table~\ref{tab:search_space} summarizes the sampled hyperparameter ranges.
+Each model family ran 50 sampled experiments for 200 epochs with the Adam optimizer. The sampling seed schedule was $42+i$ for experiment index $i$, giving seeds 42 through 91. Both searches used $R_{\max}=2000$ and enabled velocity and acceleration augmentation. The saved CNN artifacts are under \texttt{runs\_cmapss/}, with aggregate results in \texttt{runs\_cmapss/all\_results.csv} and the best checkpoint in \texttt{runs\_cmapss/exp\_046/best\_model.pt}. The Transformer artifacts are under \texttt{runs\_cmapss\_Tranformers/}, with aggregate results in \texttt{runs\_cmapss\_Tranformers/all\_results.csv} and the best checkpoint in \texttt{runs\_cmapss\_Tranformers/exp\_016/best\_model.pt}. Table~\ref{tab:search_space} summarizes the sampled hyperparameter ranges.
 
 \begin{table}[htbp]
 \centering
@@ -489,11 +536,14 @@ Dropout & 0.2, 0.3, 0.5, 0.7, 0.8 & 0.2, 0.3, 0.5, 0.7, 0.8 \\
 }
 \end{table}
 
+\newpage
+
+
 \section{Results}
 
 \subsection{Overall Comparison}
 
-Table~\ref{tab:best_model_comparison} compares the best recorded run from each model family, ranked by NASA score. The causal CNN achieves the strongest overall result, with lower RMSE, lower MAE, and a lower NASA score than the best Transformer run. The result is consistent across both symmetric error metrics and the asymmetric NASA score, so the CNN is not merely improving one metric at the expense of another.
+Table~\ref{tab:best_model_comparison} compares the best recorded run from each model family, ranked by NASA score. For all three metrics, lower values are better. The causal CNN achieves the strongest overall result, with lower RMSE, lower MAE, and a lower NASA score than the best Transformer run. The result is consistent across both symmetric error metrics and the asymmetric NASA score, so the CNN is not merely improving one metric at the expense of another.
 
 \begin{table}[htbp]
 \centering
@@ -505,6 +555,22 @@ Table~\ref{tab:best_model_comparison} compares the best recorded run from each m
 \midrule
 Causal CNN & exp\_046 & 1000 & 1.0583 & 0.0741 & 10.6022 \\
 Transformer & exp\_016 & 1000 & 1.7273 & 0.1495 & 27.9299 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The comparison in Table~\ref{tab:best_model_comparison} is based on the aggregate metrics saved for each completed experiment. Since per-engine prediction traces were not exported during these runs, the results are interpreted through aggregate error metrics and search-level sensitivity plots rather than individual engine case studies. This keeps the claims aligned with the saved artifacts: the report can compare runs and hyperparameter trends, but it cannot identify the exact hardest individual engines without rerunning inference and saving per-engine predictions.
+
+\begin{table}[htbp]
+\centering
+\caption{Best and median test performance across the 50 recorded runs per model family. Medians summarize search stability and are not model-selection criteria.}
+\label{tab:best_median_summary}
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Model} & \textbf{Best RMSE} & \textbf{Median RMSE} & \textbf{Best NASA} & \textbf{Median NASA} \\
+\midrule
+Causal CNN & 1.0583 & 9.0728 & 10.6022 & $1.29\times10^{6}$ \\
+Transformer & 1.7273 & 13.2728 & 27.9299 & $1.30\times10^{6}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -553,9 +619,18 @@ exp\_009 & 1000 & 80 & 256 & 0.0010 & 0.0001 & 0.25 & 32 & 4 & 8 & 0.5 & 0.3406 
 }
 \end{table}
 
+Figure~\ref{fig:top10_nasa_comparison} compares the ten best saved configurations from each model family under the NASA score.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.82\textwidth]{figures/top10_nasa_comparison.png}
+    \caption{Top ten saved CNN and Transformer configurations ranked by NASA score. A logarithmic axis is used because the NASA score grows exponentially for large errors.}
+    \label{fig:top10_nasa_comparison}
+\end{figure}
+
 \subsection{Sensitivity Analysis}
 
-Figure~\ref{fig:result_distributions} summarizes the distribution of test RMSE values across the 50 sampled configurations per model family. The spread is large for both searches, which means the reported best models should be interpreted as selected configurations from a stochastic hyperparameter search rather than as inevitable outcomes of the architecture alone.
+Figure~\ref{fig:result_distributions} summarizes the distribution of test RMSE values across the 50 sampled configurations per model family. The spread is large for both searches, which means the reported best models should be interpreted as selected configurations from a stochastic hyperparameter search rather than as inevitable outcomes of the architecture alone. Table~\ref{tab:best_median_summary} reinforces the same point: the best runs are much stronger than the median runs, so hyperparameter choice materially affects performance. In other words, the experiment supports a comparison of the best recorded pipelines, but it also shows that poor settings can make either architecture fail.
 
 \begin{figure}[htbp]
     \centering
@@ -564,16 +639,43 @@ Figure~\ref{fig:result_distributions} summarizes the distribution of test RMSE v
     \label{fig:result_distributions}
 \end{figure}
 
-Window length is the clearest sensitivity pattern in the saved results. For the CNN, the median RMSE improves from 33.5079 at window size 200 to 3.5596 at window size 1000. For the Transformer, the median RMSE improves from 32.7237 at window size 200 to 2.6804 at window size 1000. Figure~\ref{fig:window_sensitivity} shows the same effect visually. Longer windows are useful because late-cycle RUL estimation benefits from a longer observed degradation history, especially when the model uses derivative features.
+Window length is the clearest sensitivity pattern in the saved results. For the CNN, the median RMSE improves from 33.5079 at window size 200 to 3.5596 at window size 1000. For the Transformer, the median RMSE improves from 32.7237 at window size 200 to 2.6804 at window size 1000. Figure~\ref{fig:window_sensitivity} shows the median and interquartile spread at each window size, with individual runs shown as faint points. Longer windows are useful because late-cycle RUL estimation benefits from a longer observed degradation history, especially when the model uses derivative features.
 
-\begin{figure}[htbp]
+\begin{figure}[!h]
     \centering
     \includegraphics[width=0.82\textwidth]{figures/window_sensitivity.png}
-    \caption{Sensitivity of test RMSE to window size across sampled CNN and Transformer configurations.}
+    \caption{Sensitivity of test RMSE to window size across sampled CNN and Transformer configurations. Markers show medians, bars show interquartile ranges, and faint points show individual runs.}
     \label{fig:window_sensitivity}
 \end{figure}
 
-Dropout also affects stability. For the CNN, dropout 0.5 gives the best median RMSE among the sampled values, with median RMSE 1.7350 and median NASA score 29.9642. For the Transformer, the best single run also uses dropout 0.5, although the median Transformer RMSE at this dropout is 14.3710, indicating that dropout alone does not determine success. Hidden width shows a weaker pattern: the best runs for both model families use width 32, while larger widths do not consistently improve the median result. This suggests that the merged CMAPSS task is not simply capacity-limited under the implemented pipeline.
+Figure~\ref{fig:window_nasa_sensitivity} shows the same window-size pattern under the asymmetric NASA score.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.82\textwidth]{figures/window_nasa_sensitivity.png}
+    \caption{Sensitivity of NASA score to window size across sampled CNN and Transformer configurations. The logarithmic scale reflects the large penalty assigned to unsafe large errors.}
+    \label{fig:window_nasa_sensitivity}
+\end{figure}
+
+Figure~\ref{fig:hyperparameter_sensitivity_summary} summarizes the univariate spread in median test RMSE across common hyperparameters. This plot is not a controlled ablation because the configurations were sampled jointly, but it gives a compact view of which choices varied most strongly in the recorded search. Window size, batch size, dropout, and the time-weighting exponent all show substantial variation, while the best runs for both model families use compact hidden widths.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.82\textwidth]{figures/hyperparameter_sensitivity_summary.png}
+    \caption{Univariate sensitivity summary across the recorded hyperparameter search. Bars show the range of group median test RMSE across values of each hyperparameter.}
+    \label{fig:hyperparameter_sensitivity_summary}
+\end{figure}
+
+The aggregate results do not justify a strong claim that any single hyperparameter value is universally optimal. The more defensible interpretation is that compact models can work well in this pipeline when paired with sufficient temporal context and stable optimization settings.
+
+Figure~\ref{fig:validation_test_generalization} compares validation RMSE and test RMSE across all saved runs. The CNN shows a strong validation--test relationship, with correlation approximately 0.84. The Transformer shows a much weaker relationship, with correlation approximately 0.04. This suggests that validation RMSE was a more reliable model-selection signal for the CNN search than for the Transformer search under the implemented split and hyperparameter ranges.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.82\textwidth]{figures/validation_test_generalization.png}
+    \caption{Validation RMSE versus test RMSE across the 50 sampled configurations for each model family.}
+    \label{fig:validation_test_generalization}
+\end{figure}
 
 Figure~\ref{fig:rmse_nasa_scatter} compares RMSE and NASA score. The relationship is positive but not linear because the NASA score is asymmetric and exponential. Configurations with moderate RMSE can still receive very large NASA scores if their errors include risky overestimation of remaining life.
 
@@ -590,30 +692,34 @@ The best CNN has the lowest NASA score, which is important because the NASA metr
 
 The worst CNN by NASA score is exp\_037, with test RMSE 38.4943, MAE 29.1333, and NASA score approximately $3.41\times10^{11}$. The worst CNN by RMSE is exp\_027, with RMSE 100.2669 and MAE 89.6458. For the Transformer, exp\_048 is worst by both RMSE and NASA score, with RMSE 33.0754, MAE 12.7370, and NASA score approximately $3.29\times10^6$. These failed configurations are concentrated at short windows, especially window size 200, supporting the interpretation that insufficient temporal context can lead to unsafe RUL behavior.
 
-The saved artifacts do not include per-engine prediction files, so this report does not claim engine-level case studies. The error analysis is therefore restricted to aggregate behavior supported by the recorded metrics. Figure~\ref{fig:training_curves} includes the saved training-history plots for the best CNN and Transformer runs, providing a qualitative view of convergence and validation behavior.
+Per-engine prediction traces were not exported during the recorded experiments, so the error analysis is restricted to aggregate behavior supported by the saved metrics. Figure~\ref{fig:training_curves} includes the saved training-history plots for the best CNN and Transformer runs, providing a qualitative view of convergence and validation behavior.
 
 \begin{figure}[htbp]
     \centering
-    \begin{subfigure}{0.48\textwidth}
+    \begin{subfigure}{0.82\textwidth}
         \centering
-        \includegraphics[width=\linewidth]{runs_cmapss/exp_046/history.png}
+        \includegraphics[width=\linewidth]{convolution history.png}
         \caption{Causal CNN training history.}
     \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.48\textwidth}
+    
+    \vspace{0.8em}
+    
+    \begin{subfigure}{0.82\textwidth}
         \centering
-        \includegraphics[width=\linewidth]{runs_cmapss_Tranformers/exp_016/history.png}
+        \includegraphics[width=\linewidth]{history_transformers.png}
         \caption{Transformer training history.}
     \end{subfigure}
     \caption{Training loss and validation RMSE history for the best recorded CNN and Transformer configurations.}
     \label{fig:training_curves}
 \end{figure}
 
-\section{Sensitivity / Ablation Limitations}
+\newpage
 
-The available saved experiments support sensitivity analysis rather than a complete ablation study. All 100 recorded runs use both velocity and acceleration features, and all sampled configurations use a positive time-weighting exponent $\beta$. Therefore, the report does not claim a raw-only, velocity-only, acceleration-only, or no-time-weight ablation. The defensible conclusion is narrower: within the implemented feature pipeline, performance is highly sensitive to window size, dropout, model width, optimization settings, and model selection.
+\section{Controlled Ablation Limitations}
 
-The strongest evidence from the current artifacts is that longer windows consistently help both architectures, and that the best CNN combines a long window with a compact convolutional backbone. The derivative features remain theoretically motivated and consistently present in the implementation, but their isolated contribution would require additional controlled runs that disable velocity and acceleration channels.
+The available saved experiments support sensitivity analysis rather than a complete controlled ablation study. All 100 recorded runs use both velocity and acceleration features, and all sampled configurations use a positive time-weighting exponent $\beta$. Therefore, the report does not claim a raw-only, velocity-only, acceleration-only, or no-time-weight ablation. The defensible conclusion is narrower: within the implemented feature pipeline, performance is highly sensitive to window size, model family, optimization settings, and model selection.
+
+The strongest evidence from the current artifacts is that longer windows consistently help both architectures, and that the best CNN combines a long window with a compact convolutional backbone. The derivative features and time-weighted loss remain theoretically motivated and consistently present in the implementation, but their isolated contributions would require additional controlled runs that disable each component one at a time.
 
 \section{Discussion}
 
@@ -621,13 +727,17 @@ The implemented pipelines treat RUL estimation as causal sequence regression. Th
 
 The shared time-weighted objective is consistent with degradation physics. Early engine cycles often resemble healthy operation and may carry limited information about exact failure time. Later cycles contain stronger degradation signatures, so increasing the regression weight across the window encourages the models to focus on the portion of the trajectory most relevant to final RUL estimation. The CNN additionally masks early predictions that are still within the convolutional warmup region, avoiding loss contributions from outputs influenced by padding.
 
-The best CNN likely wins because the task rewards local temporal pattern extraction over unrestricted pairwise attention. With velocity and acceleration channels already exposing local degradation dynamics, a compact dilated convolution can combine neighboring trends efficiently and with fewer optimization degrees of freedom. The Transformer has a more flexible dependency mechanism, but the saved search shows that this flexibility does not automatically translate to better final-window RUL estimates under the sampled configurations.
+The best recorded CNN configuration outperforms the best recorded Transformer configuration on RMSE, MAE, and NASA score. This should be read as an artifact-backed result for the implemented search, not as a general proof that causal CNNs dominate Transformers for RUL estimation. The saved runs show that a compact dilated convolution was easier to select reliably under the current pipeline, while the Transformer search had weaker validation-to-test alignment.
 
 The results also show why the NASA score should be interpreted alongside RMSE and MAE. RMSE measures average squared error, while the NASA score encodes a maintenance preference: overestimating RUL is worse than underestimating it. This is why failed runs can produce extremely large NASA scores even when their RMSE values are not the largest in the entire search. For a prognostics pipeline, this safety-oriented asymmetry is not a detail; it changes which model behavior is acceptable.
 
+Exporting per-engine predictions in future runs would enable predicted-versus-true plots, residual histograms, overestimation analysis, and per-subset breakdowns in addition to the aggregate metrics reported here.
+
+\newpage
+
 \section{Limitations}
 
-The results come from sampled hyperparameter experiments rather than exhaustive searches. Therefore, the reported best models should be interpreted as the best recorded configurations from the implemented notebooks, not as globally optimal architectures. The unusually large NASA scores in some failed runs also indicate that the asymmetric metric can become very large when a model substantially overestimates RUL.
+The results come from sampled hyperparameter experiments rather than exhaustive searches. Therefore, the reported best models should be interpreted as the best recorded configurations from the implemented experiments, not as globally optimal architectures. The unusually large NASA scores in some failed runs also indicate that the asymmetric metric can become very large when a model substantially overestimates RUL.
 
 The experimental artifacts do not include controlled raw-only, derivative-only, or no-time-weight runs, so this report cannot isolate the independent causal contribution of each preprocessing component. The saved artifacts also do not include per-engine prediction files, which prevents a fully grounded case-study analysis of the hardest engines without rerunning inference from checkpoints.
 
@@ -635,9 +745,25 @@ Finally, all experiments are conducted on CMAPSS simulation data. Real flight da
 
 \section{Conclusion}
 
-This work implements and compares two causal deep learning frameworks for RUL estimation on CMAPSS turbofan degradation trajectories. Both models combine train-only standardization, dynamics-based feature augmentation, causal temporal modeling, time-weighted regression, and final-window inference. The best causal CNN achieves the strongest recorded result, with test RMSE 1.0583, MAE 0.0741, and NASA score 10.6022. The best Transformer also performs strongly, achieving test RMSE 1.7273, MAE 0.1495, and NASA score 27.9299.
+This work implements and compares two causal deep learning frameworks for RUL estimation on CMAPSS turbofan degradation trajectories. Both models combine train-only standardization, dynamics-based feature augmentation, causal temporal modeling, time-weighted regression, and final-window inference. The best recorded causal CNN achieves the strongest saved result, with test RMSE 1.0583, MAE 0.0741, and NASA score 10.6022. The best recorded Transformer achieves test RMSE 1.7273, MAE 0.1495, and NASA score 27.9299.
 
-The main empirical pattern is that long causal windows and compact temporal models are effective for this pipeline. Future work should add controlled ablations for raw features, velocity, acceleration, and time weighting; save per-engine predictions for case-study analysis; repeat the best configurations across multiple seeds; and add sensor-level interpretability analyses to identify which measurements drive late-stage RUL predictions.
+The main empirical pattern is that long causal windows and compact temporal models are effective for this pipeline. Future work should save per-engine predictions, add controlled ablations for raw features, velocity, acceleration, and time weighting, repeat the best configurations across multiple seeds, and report per-subset performance if experiments are rerun.
+
+\section{Contributions}
+\begin{itemize}
+    \item Sai Deepak Sana - Problem Statement finding and Causal CNN Design and Implementation
+    \item Ponguru Bhanu - Core architecture design and causal transformer implementation.
+    \item Peddineni Harshith - Debugging, Validation of results and report writing.
+\end{itemize}
+
+\section{Implementation links}
+\begin{itemize}
+    \item \textbf{GitHub}: \href{https://github.com/saideepaksana/Causal-Deep-Learning-Framework-for-Remaining-Useful-Life-Estimation-in-Turbofan-Engines}{Project Source Code}
+    \item \textbf{Kaggle (CNN)}: \href{https://www.kaggle.com/code/bhanuponguru2024/ml4ps-cnn}{CNN Model Notebook}
+    \item \textbf{Kaggle (Transformer)}: \href{https://www.kaggle.com/code/bhanuponguru2024/ml4ps-transformer}{Transformer Model Notebook}
+\end{itemize}
+
+\newpage
 
 \begin{thebibliography}{9}
 
